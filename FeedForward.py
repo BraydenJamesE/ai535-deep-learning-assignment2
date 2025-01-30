@@ -1,5 +1,5 @@
 """
-INSERT YOUR NAME HERE
+Brayden Edwards
 """
 
 from turtle import width
@@ -43,12 +43,13 @@ class ReLU:
 
   # TODO: Compute ReLU(input) element-wise
   def forward(self, input):
-    raise Exception('Student error: You haven\'t implemented the forward pass for ReLU yet.')
+    self.input = input # storing the original input for backprop
+    return np.max(0, input)
       
   # TODO: Given dL/doutput, return dL/dinput
   def backward(self, grad):
-    raise Exception('Student error: You haven\'t implemented the backward pass for ReLU yet.')
-
+    return grad * (self.input > 0) 
+  
   # No parameters so nothing to do during a gradient descent step
   def step(self,step_size, momentum = 0, weight_decay = 0):
     return
@@ -117,12 +118,12 @@ def evaluate(model, X_val, Y_val, batch_size):
 def main():
 
   # TODO: Set optimization parameters (NEED TO SUPPLY THESE)
-  batch_size = 
-  max_epochs = 
-  step_size = 
+  batch_size = None
+  max_epochs = None
+  step_size = None
 
-  number_of_layers = 
-  width_of_layers = 
+  number_of_layers = None
+  width_of_layers = None
   weight_decay = 0.0
   momentum = 0.8
 
@@ -171,8 +172,8 @@ def main():
       # Book-keeping for loss / accuracy
   
     # Evaluate performance on test.
-    _, tacc = evaluate(net, X_test, Y_test, batch_size)
-    print(tacc)
+    #_, tacc = evaluate(net, X_test, Y_test, batch_size) # added comment to this line of code. this line is not commented out in original template
+    #print(tacc) # added comment to this line of code. this line is not commented out in original template
 
     
     ###############################################################
@@ -234,7 +235,8 @@ class FeedForwardNeuralNetwork:
       self.layers = [LinearLayer(input_dim, output_dim)]
     else:
     # TODO: Please create a network with hidden layers based on the parameters
-
+      return # line not in original template
+  
   def forward(self, X):
     for layer in self.layers:
       X = layer.forward(X)
