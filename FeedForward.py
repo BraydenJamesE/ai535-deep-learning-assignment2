@@ -23,33 +23,39 @@ logging.basicConfig(
 
 
 class SigmoidCrossEntropy:
-  
   # Compute the cross entropy loss after sigmoid. The reason they are put into the same layer is because the gradient has a simpler form
   # logits -- batch_size x num_classes set of scores, logits[i,j] is score of class j for batch element i
   # labels -- batch_size x 1 vector of integer label id (0,1) where labels[i] is the label for batch element i
   #
-  # TODO: Output should be a positive scalar value equal to the average cross entropy loss after sigmoid
+  # TODO: (DONE) Output should be a positive scalar value equal to the average cross entropy loss after sigmoid
   def forward(self, logits, labels):
+    self.logits = logits
+    self.labels = labels
     labels_converted = 2 * labels - 1 # this line of code changes the labels from 0 and 1 to -1 and 1. 
+    self.labels_converted = labels_converted
     loss = np.mean(-np.log(1 + np.exp(-labels_converted * logits))) # lecture slides said to just use the sum but online formulas had the mean. Unsure which was most appropriate
     return loss
 
-  # TODO: Compute the gradient of the cross entropy loss with respect to the the input logits
+  # TODO: (DONE) Compute the gradient of the cross entropy loss with respect to the the input logits 
   def backward(self):
-    raise Exception('Student error: You haven\'t implemented the backward pass for SigmoidCrossEntropy yet.')
+    return self.labels_converted / (np.exp(self.labels_converted * self.logits) + 1)
+    
+    
+
 
 
 
 class ReLU:
 
-  # TODO: Compute ReLU(input) element-wise
+  # TODO: (DONE)Compute ReLU(input) element-wise
   def forward(self, input):
     self.input = input # storing the original input for backprop
     return np.max(0, input)
       
-  # TODO: Given dL/doutput, return dL/dinput
+  # TODO: (DONE) Given dL/doutput, return dL/dinput
   def backward(self, grad):
-    return grad * (self.input > 0) # scaling each element of grad by 1 if the corresponding element in input is greater than 0. Otherwise, scaling that element in grad by 0. 
+    alpha = 0.01
+    return grad * np.where(self.input > 0, 1, alpha) # scaling each element of grad by 1 if the corresponding element in input is greater than 0. If input is 0, scaling gradient by 0.01. Otherwise, scaling that element in grad by 0. 
   
   # No parameters so nothing to do during a gradient descent step
   def step(self,step_size, momentum = 0, weight_decay = 0):
@@ -58,23 +64,24 @@ class ReLU:
 
 class LinearLayer:
 
-  # TODO: Initialize our layer with (input_dim, output_dim) weight matrix and a (1,output_dim) bias vector
+  # TODO: (DONE) Initialize our layer with (input_dim, output_dim) weight matrix and a (1,output_dim) bias vector
   def __init__(self, input_dim, output_dim):
-    raise Exception('Student error: You haven\'t implemented the init for LinearLayer yet.')
+    self.W = np.random.rand(input_dim, output_dim)
+    self.b = np.zeros((1, output_dim))
     
-  # TODO: During the forward pass, we simply compute XW+b
+  # TODO: (DONE) During the forward pass, we simply compute XW+b
   def forward(self, input):
-    raise Exception('Student error: You haven\'t implemented the forward pass for LinearLayer yet.')
+    self.input = input
+    return input @ self.W + self.b
 
-
-  # TODO: Backward pass inputs:
+  # TODO: (DONE) Backward pass inputs:
   #
   # grad dL/dZ -- For a batch size of n, grad is a (n x output_dim) matrix where 
   #         the i'th row is the gradient of the loss of example i with respect 
   #         to z_i (the output of this layer for example i)
 
   # Computes and stores:
-  #
+  # 
   # self.grad_weights dL/dW --  A (input_dim x output_dim) matrix storing the gradient
   #                       of the loss with respect to the weights of this layer. 
   #                       This is an summation over the gradient of the loss of
@@ -92,7 +99,10 @@ class LinearLayer:
   #               to x_i (the input of this layer for example i) 
 
   def backward(self, grad):
-    raise Exception('Student error: You haven\'t implemented the backward pass for LinearLayer yet.')
+    self.grad_weights = self.inputs.T @ grad 
+    self.grad_bias = np.sum(grad, axis=0, keepdims=True)
+    self.grad_input = grad @ self.weights.T
+    return self.grad_input
     
 
   ######################################################
