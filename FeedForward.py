@@ -1,5 +1,5 @@
 """
-Brayden Edwards
+  Brayden Edwards
 """
 
 from turtle import width
@@ -20,8 +20,6 @@ logging.basicConfig(
 ######################################################
 # Q1 Implement Init, Forward, and Backward For Layers
 ######################################################
-
-
 class SigmoidCrossEntropy:
   # Compute the cross entropy loss after sigmoid. The reason they are put into the same layer is because the gradient has a simpler form
   # logits -- batch_size x num_classes set of scores, logits[i,j] is score of class j for batch element i
@@ -29,33 +27,30 @@ class SigmoidCrossEntropy:
   #
   # TODO: (DONE) Output should be a positive scalar value equal to the average cross entropy loss after sigmoid
   def forward(self, logits, labels):
+    self.batch_size = labels.shape[0]
     self.logits = logits
     self.labels = labels
-    labels_converted = 2 * labels - 1 # this line of code changes the labels from 0 and 1 to -1 and 1. 
-    self.labels_converted = labels_converted
-    loss = np.mean(-np.log(1 + np.exp(-labels_converted * logits))) # lecture slides said to just use the sum but online formulas had the mean. Unsure which was most appropriate
+    
+    self.sigmoid_output = 1 / (1 + np.exp(-logits))
+    
+    loss = -np.mean(labels * np.log(self.sigmoid_output + 1e-9) + (1 - labels) * np.log(1 - self.sigmoid_output + 1e-9))
     return loss
 
   # TODO: (DONE) Compute the gradient of the cross entropy loss with respect to the the input logits 
   def backward(self):
-    return self.labels_converted / (np.exp(self.labels_converted * self.logits) + 1)
+    return (self.sigmoid_output - self.labels) / self.batch_size
     
-    
-
-
-
+  
 
 class ReLU:
-
   # TODO: (DONE)Compute ReLU(input) element-wise
   def forward(self, input):
     self.input = input # storing the original input for backprop
-    return np.max(0, input)
+    return np.maximum(0, input)
       
   # TODO: (DONE) Given dL/doutput, return dL/dinput
   def backward(self, grad):
-    alpha = 0.01
-    return grad * np.where(self.input > 0, 1, alpha) # scaling each element of grad by 1 if the corresponding element in input is greater than 0. If input is 0, scaling gradient by 0.01. Otherwise, scaling that element in grad by 0. 
+    return grad * (self.input > 0)
   
   # No parameters so nothing to do during a gradient descent step
   def step(self,step_size, momentum = 0, weight_decay = 0):
@@ -63,11 +58,13 @@ class ReLU:
 
 
 class LinearLayer:
-
   # TODO: (DONE) Initialize our layer with (input_dim, output_dim) weight matrix and a (1,output_dim) bias vector
   def __init__(self, input_dim, output_dim):
-    self.W = np.random.rand(input_dim, output_dim)
+    self.W = np.random.uniform(-0.05, 0.05, (input_dim, output_dim))
+ # np.random.rand(input_dim, output_dim)
     self.b = np.zeros((1, output_dim))
+    self.velocity_W = 0
+    self.velocity_b = 0
     
   # TODO: (DONE) During the forward pass, we simply compute XW+b
   def forward(self, input):
@@ -99,9 +96,9 @@ class LinearLayer:
   #               to x_i (the input of this layer for example i) 
 
   def backward(self, grad):
-    self.grad_weights = self.inputs.T @ grad 
+    self.grad_weights = self.input.T @ grad 
     self.grad_bias = np.sum(grad, axis=0, keepdims=True)
-    self.grad_input = grad @ self.weights.T
+    self.grad_input = grad @ self.W.T
     return self.grad_input
     
 
@@ -110,40 +107,94 @@ class LinearLayer:
   ######################################################  
   def step(self, step_size, momentum = 0.8, weight_decay = 0.0):
   # TODO: Implement the step
-    raise Exception('Student error: You haven\'t implemented the step for LinearLayer yet.')
-
-
-
-
+    # handling W grads
+    weight_decay_update_W = 2 * step_size * weight_decay * self.W
+    new_grad_W = step_size * self.grad_weights
+    
+    self.velocity_W = momentum * self.velocity_W - new_grad_W - weight_decay_update_W 
+    self.W = self.W + self.velocity_W
+    
+    # handling bias grads
+    #weight_decay_update_b = 2 * step_size * weight_decay * self.b # Found an article telling me to not use weight decay on the bias term. May consider assessing the performance with and without. 
+    new_grad_b = step_size * self.grad_bias
+    
+    self.velocity_b = momentum * self.velocity_b - new_grad_b #- weight_decay_update_b # see comment above for including weight decay or not
+    self.b = self.b + self.velocity_b
+    
 
 
 ######################################################
 # Q4 Implement Evaluation for Monitoring Training
 ###################################################### 
-
 # TODO: Given a model, X/Y dataset, and batch size, return the average cross-entropy loss and accuracy over the set
 def evaluate(model, X_val, Y_val, batch_size):
-  raise Exception('Student error: You haven\'t implemented the step for evaluate function.')
+  loss_fn = SigmoidCrossEntropy()
+  
+  num_examples = X_val.shape[0]
+  total_loss = 0
+  correct_preds = 0
+  
+  for i in range(0, num_examples, batch_size):
+    X_batch = X_val[i:i+batch_size]
+    Y_batch = Y_val[i:i+batch_size]
+    logits = model.forward(X_batch)
+    if np.isnan(logits).any(): print("Warning: logits is NaN! in testing")
+    loss = loss_fn.forward(logits, Y_batch)
+    total_loss += loss
+    
+    probabilities = 1 / (1 + np.exp(-logits))
+    predictions = (probabilities > 0.5).astype(int)
+    correct_preds += np.sum(predictions == Y_batch)
+    
+  avg_loss = total_loss / (num_examples // batch_size)
+  accuracy = correct_preds / num_examples
+  
+  return avg_loss, accuracy
 
+def normalize_data(data):
+  std = np.std(data)
+  mean = np.mean(data)
+  return (data - mean) / std
+
+def plot_train_val_accuracy(train_info, val_info):
+    fig, ax = plt.subplots(figsize=(16,9))  # Correct way to get an axis
+    ax.set_ylim(0, 1)
+
+    ax.plot(train_info, c="blue", label="Train Accuracy")
+    ax.plot(val_info, c="red", label="Validation Accuracy")
+
+    ax.set_xlabel("Iterations")
+    ax.set_ylabel("Accuracy")
+    ax.legend()  
+    plt.show()
+  
+def plot_train_loss(train_loss):
+    fig, ax = plt.subplots(figsize=(16,9))  # Correct way to get an axis
+    ax.set_ylim(0, 1)
+
+    ax.plot(train_loss, c="blue", label="Train Loss")
+
+    ax.set_xlabel("Iterations")
+    ax.set_ylabel("Avg. Cross-Entropy Loss")
+    ax.legend()  
+    plt.show()
 
 def main():
-
   # TODO: Set optimization parameters (NEED TO SUPPLY THESE)
-  batch_size = None
-  max_epochs = None
-  step_size = None
+  batch_size = 32
+  max_epochs = 50
+  step_size = 0.0001
 
-  number_of_layers = None
-  width_of_layers = None
-  weight_decay = 0.0
-  momentum = 0.8
-
+  number_of_layers = 3
+  width_of_layers = 64
+  weight_decay = 0.0001
+  momentum = 0.5
 
   # Load data
   data = pickle.load(open('cifar_2class_py3.p', 'rb'))
-  X_train = data['train_data']
+  X_train = normalize_data(data['train_data'].astype(np.float32))
+  X_test = normalize_data(data['test_data'].astype(np.float32))
   Y_train = data['train_labels']
-  X_test = data['test_data']
   Y_test = data['test_labels']
   
   # Some helpful dimensions
@@ -161,31 +212,56 @@ def main():
   accs = []
   val_accs = []
   
-
-  raise Exception('Student error: You haven\'t implemented the training loop yet.')
+  loss_fn = SigmoidCrossEntropy()
   
   # Q2 TODO: For each epoch below max epochs
-
+  for epoch in range(max_epochs): 
+    
     # Scramble order of examples
+    indices = np.random.permutation(num_examples)
+    X_train = X_train[indices]
+    Y_train = Y_train[indices]
+    epoch_loss = 0
+    correct_preds = 0
 
     # for each batch in data:
-
+    for i in range(0, num_examples - (num_examples % batch_size), batch_size): # throwing out the last batch if it's not full
       # Gather batch
+      X_batch = X_train[i:i+batch_size]
+      Y_batch = Y_train[i:i+batch_size]
 
       # Compute forward pass
-
+      logits = net.forward(X_batch)
+      if np.isnan(logits).any(): print("Warning: logits is NaN! in training")
+      
       # Compute loss
+      loss = loss_fn.forward(logits, Y_batch)
+      
+      epoch_loss += loss
 
       # Backward loss and networks
-
+      grad = loss_fn.backward()
+      net.backward(grad)
+      
       # Take optimizer step
-
+      net.step(step_size, momentum, weight_decay)
+      
       # Book-keeping for loss / accuracy
+      probabilities = 1 / (1 + np.exp(-logits))
+      predictions = (probabilities > 0.5).astype(int)
+      correct_preds += np.sum(predictions == Y_batch)
   
     # Evaluate performance on test.
-    #_, tacc = evaluate(net, X_test, Y_test, batch_size) # added comment to this line of code. this line is not commented out in original template
-    #print(tacc) # added comment to this line of code. this line is not commented out in original template
+    epoch_avg_loss = epoch_loss / (num_examples // batch_size)
+    epoch_avg_acc = correct_preds / num_examples
+    
+    val_loss, tacc = evaluate(net, X_test, Y_test, batch_size) 
 
+    losses.append(epoch_avg_loss)
+    accs.append(epoch_avg_acc)
+    val_losses.append(val_loss)
+    val_accs.append(tacc)
+    
     
     ###############################################################
     # Print some stats about the optimization process after each epoch
@@ -195,8 +271,10 @@ def main():
     # vacc -- testing accuracy this epoch
     ###############################################################
     
-    #logging.info("[Epoch {:3}]   Loss:  {:8.4}     Train Acc:  {:8.4}%      Val Acc:  {:8.4}%".format(i,epoch_avg_loss, epoch_avg_acc, vacc*100))
-
+    logging.info("[Epoch {:3}]   Loss:  {:8.4}     Train Acc:  {:8.4}%      Val Acc:  {:8.4}%".format(epoch ,epoch_avg_loss, epoch_avg_acc * 100, tacc*100))
+  
+  # plot_train_val_accuracy(train_info=accs, val_info=val_accs)
+  # plot_train_loss(train_info=losses)
     
   ###############################################################
   # Code for producing output plot requires
@@ -207,31 +285,40 @@ def main():
   # val_acc -- a list of testing accuracy at each epoch
   # batch_size -- the batch size
   ################################################################
-
-  # Plot training and testing curves
-  fig, ax1 = plt.subplots(figsize=(16,9))
-  color = 'tab:red'
-  ax1.plot(range(len(losses)), losses, c=color, alpha=0.25, label="Train Loss")
-  ax1.plot([np.ceil((i+1)*len(X_train)/batch_size) for i in range(len(val_losses))], val_losses,c="red", label="Val. Loss")
-  ax1.set_xlabel("Iterations")
-  ax1.set_ylabel("Avg. Cross-Entropy Loss", c=color)
-  ax1.tick_params(axis='y', labelcolor=color)
-  #ax1.set_ylim(-0.01,3)
   
-  ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-  color = 'tab:blue'
-  ax2.plot(range(len(losses)), accs, c=color, label="Train Acc.", alpha=0.25)
-  ax2.plot([np.ceil((i+1)*len(X_train)/batch_size) for i in range(len(val_accs))], val_accs,c="blue", label="Val. Acc.")
-  ax2.set_ylabel(" Accuracy", c=color)
-  ax2.tick_params(axis='y', labelcolor=color)
-  ax2.set_ylim(-0.01,1.01)
   
-  fig.tight_layout()  # otherwise the right y-label is slightly clipped
-  ax1.legend(loc="center")
-  ax2.legend(loc="center right")
-  plt.show()  
+  fig = plt.figure(figsize=(16, 9))
 
+  # ---- FIRST PLOT: Training & Validation Loss ----
+  plt.clf()  # Clear the figure to prepare for the first plot
+  plt.plot(range(len(losses)), losses, c="blue", label="Train Loss")
+  plt.plot(range(len(val_losses)), val_losses, c="red", label="Validation Loss")
 
+  plt.xlabel("Epochs")
+  plt.ylabel("Avg. Cross-Entropy Loss")
+  plt.legend(loc="upper right")
+  plt.ylim(0, max(max(losses), max(val_losses)) * 1.2)  # Dynamically scale Y-axis
+  plt.title("Training vs Validation Loss")
+
+  plt.draw()  # Draw the figure but don't close it
+  plt.pause(1)  # Pause for interaction
+
+  # ---- SECOND PLOT: Training & Validation Accuracy ----
+  plt.clf()  # Clear figure to prepare for the second plot
+  plt.plot(range(len(accs)), accs, c="blue", label="Train Accuracy")
+  plt.plot(range(len(val_accs)), val_accs, c="red", label="Validation Accuracy")
+
+  plt.xlabel("Epochs")
+  plt.ylabel("Accuracy")
+  plt.legend(loc="lower right")
+  plt.ylim(0, 1.01)  # Ensure accuracy stays between 0-1
+  plt.title("Training vs Validation Accuracy")
+
+  plt.draw()  # Update the figure
+  plt.pause(1)  # Pause for interaction
+
+  # Keep the window open and interactive
+  plt.show()
 
 #####################################################
 # Feedforward Neural Network Structure
@@ -241,12 +328,18 @@ def main():
 class FeedForwardNeuralNetwork:
 
   def __init__(self, input_dim, output_dim, hidden_dim, num_layers):
- 
+    self.layers = []
     if num_layers == 1:
-      self.layers = [LinearLayer(input_dim, output_dim)]
+      self.layers.append(LinearLayer(input_dim, output_dim))
     else:
     # TODO: Please create a network with hidden layers based on the parameters
-      return # line not in original template
+      self.layers.append(LinearLayer(input_dim, hidden_dim))
+      self.layers.append(ReLU())
+      for _ in range(num_layers - 2):
+        self.layers.append(LinearLayer(hidden_dim, hidden_dim))
+        self.layers.append(ReLU())
+      self.layers.append(LinearLayer(hidden_dim, output_dim))
+        
   
   def forward(self, X):
     for layer in self.layers:
