@@ -156,6 +156,38 @@ def normalize_data(data):
   mean = np.mean(data)
   return (data - mean) / std
 
+
+def plot_outputs(info, title, y_label, labels, sub_info_count=1, x_label="Iterations"): 
+  for i in range(sub_info_count):
+    plt.plot(info[i], label=labels[i])
+  
+  plt.xlabel(x_label)
+  plt.ylabel(y_label)
+  plt.title(title)
+  
+  plt.legend()
+  plt.show()
+  
+  
+def plot_accuracy_per_batch_size(accuracies, batch_sizes):
+  colors = ['red', 'yellow', 'blue', 'green', 'purple', 'pink', 'brown', 'orange']
+  
+  if len(batch_sizes) != len(accuracies):
+    print("Batch Size and Accuracy Data Mismatch")
+    return 
+  
+  for i in range(len(batch_sizes)):
+    plt.plot(accuracies[i], label=batch_sizes[i], color=colors[i])
+
+  plt.xlabel("Iterations")
+  plt.ylabel("Validation Accuracy")
+  plt.title("Validatoin Accuracy With Various Batch Sizes")
+
+  plt.legend()
+  plt.show()
+  
+
+
 def plot_train_val_accuracy(train_info, val_info):
     fig, ax = plt.subplots(figsize=(16,9))  # Correct way to get an axis
     ax.set_ylim(0, 1)
@@ -181,14 +213,14 @@ def plot_train_loss(train_loss):
 
 def main():
   # TODO: Set optimization parameters (NEED TO SUPPLY THESE)
-  batch_size = 32
-  max_epochs = 50
-  step_size = 0.0001
+  batch_sizes = [10, 25, 50, 75]
+  max_epochs = 100
+  step_size = 0.001
 
   number_of_layers = 3
   width_of_layers = 64
-  weight_decay = 0.0001
-  momentum = 0.5
+  weight_decay = 0.001
+  momentum = 0.8
 
   # Load data
   data = pickle.load(open('cifar_2class_py3.p', 'rb'))
@@ -210,71 +242,105 @@ def main():
   losses = []
   val_losses = []
   accs = []
+  list_of_val_accs = []
   val_accs = []
   
   loss_fn = SigmoidCrossEntropy()
+  for batch_size in batch_sizes:
+    # Q2 TODO: For each epoch below max epochs
+    for epoch in range(max_epochs): 
+      
+      # Scramble order of examples
+      indices = np.random.permutation(num_examples)
+      X_train = X_train[indices]
+      Y_train = Y_train[indices]
+      epoch_loss = 0
+      correct_preds = 0
+
+      # for each batch in data:
+      for i in range(0, num_examples - (num_examples % batch_size), batch_size): # throwing out the last batch if it's not full
+        # Gather batch
+        X_batch = X_train[i:i+batch_size]
+        Y_batch = Y_train[i:i+batch_size]
+
+        # Compute forward pass
+        logits = net.forward(X_batch)
+        if np.isnan(logits).any(): print("Warning: logits is NaN! in training")
+        
+        # Compute loss
+        loss = loss_fn.forward(logits, Y_batch)
+        
+        epoch_loss += loss
+
+        # Backward loss and networks
+        grad = loss_fn.backward()
+        net.backward(grad)
+        
+        # Take optimizer step
+        net.step(step_size, momentum, weight_decay)
+        
+        # Book-keeping for loss / accuracy
+        probabilities = 1 / (1 + np.exp(-logits))
+        predictions = (probabilities > 0.5).astype(int)
+        correct_preds += np.sum(predictions == Y_batch)
+    
+      # Evaluate performance on test.
+      epoch_avg_loss = epoch_loss / (num_examples // batch_size)
+      epoch_avg_acc = correct_preds / num_examples
+      
+      val_loss, tacc = evaluate(net, X_test, Y_test, batch_size) 
+
+      losses.append(epoch_avg_loss)
+      accs.append(epoch_avg_acc)
+      val_losses.append(val_loss)
+      val_accs.append(tacc)
+      
+      logging.info("[Epoch {:3}]   Loss:  {:8.4}     Train Acc:  {:8.4}%      Val Acc:  {:8.4}%".format(epoch ,epoch_avg_loss, epoch_avg_acc * 100, tacc*100))
   
-  # Q2 TODO: For each epoch below max epochs
-  for epoch in range(max_epochs): 
-    
-    # Scramble order of examples
-    indices = np.random.permutation(num_examples)
-    X_train = X_train[indices]
-    Y_train = Y_train[indices]
-    epoch_loss = 0
-    correct_preds = 0
-
-    # for each batch in data:
-    for i in range(0, num_examples - (num_examples % batch_size), batch_size): # throwing out the last batch if it's not full
-      # Gather batch
-      X_batch = X_train[i:i+batch_size]
-      Y_batch = Y_train[i:i+batch_size]
-
-      # Compute forward pass
-      logits = net.forward(X_batch)
-      if np.isnan(logits).any(): print("Warning: logits is NaN! in training")
-      
-      # Compute loss
-      loss = loss_fn.forward(logits, Y_batch)
-      
-      epoch_loss += loss
-
-      # Backward loss and networks
-      grad = loss_fn.backward()
-      net.backward(grad)
-      
-      # Take optimizer step
-      net.step(step_size, momentum, weight_decay)
-      
-      # Book-keeping for loss / accuracy
-      probabilities = 1 / (1 + np.exp(-logits))
-      predictions = (probabilities > 0.5).astype(int)
-      correct_preds += np.sum(predictions == Y_batch)
+  list_of_val_accs.append(val_accs) # creating a list of lists for plotting
   
-    # Evaluate performance on test.
-    epoch_avg_loss = epoch_loss / (num_examples // batch_size)
-    epoch_avg_acc = correct_preds / num_examples
-    
-    val_loss, tacc = evaluate(net, X_test, Y_test, batch_size) 
-
-    losses.append(epoch_avg_loss)
-    accs.append(epoch_avg_acc)
-    val_losses.append(val_loss)
-    val_accs.append(tacc)
-    
-    
-    ###############################################################
-    # Print some stats about the optimization process after each epoch
-    ###############################################################
-    # epoch_avg_loss -- average training loss across batches this epoch
-    # epoch_avg_acc -- average accuracy across batches this epoch
-    # vacc -- testing accuracy this epoch
-    ###############################################################
-    
-    logging.info("[Epoch {:3}]   Loss:  {:8.4}     Train Acc:  {:8.4}%      Val Acc:  {:8.4}%".format(epoch ,epoch_avg_loss, epoch_avg_acc * 100, tacc*100))
+  # plotting batch size and validation loss
+  # title = "Validation Loss per Batch Size"
+  # y_label = "Validation Loss"
+  # x_label = "Batch Size"
+  # labels = val_losses
+  # plot_outputs(labels, title, y_label, labels, 1, x_label)
   
-  # plot_train_val_accuracy(train_info=accs, val_info=val_accs)
-  # plot_train_loss(train_info=losses)
+  # plotting batch size and validation accuracy
+  # title = "Validation Accuracy per Batch Size"
+  # y_label = "Validation Accuracy"
+  # x_label = "Batch Size"
+  # labels = val_accs
+  # plot_outputs(labels, title, y_label, labels, 1, x_label)
+  
+  # i) test accuracy with different number of batch size
+  plot_accuracy_per_batch_size(list_of_val_accs, batch_sizes)
+  # ii)test accuracy with different learning rate
+  # iii) test accuracy with different number of hidden units
+  
+  # train_val_losses = [losses, val_losses]
+  # title = "Losses"
+  # x_label = "iterations"
+  # y_label = "Sigmoid Cross Entropy Loss"
+  # labels = ["training loss", "validation loss"]
+  # plot_outputs(train_val_losses, title, x_label, y_label, labels, 2)
+
+  
+  ## plotting loss
+  # train_val_losses = [losses, val_losses]
+  # title = "Losses"
+  # x_label = "iterations"
+  # y_label = "Sigmoid Cross Entropy Loss"
+  # labels = ["training loss", "validation loss"]
+  # plot_outputs(train_val_losses, title, x_label, y_label, labels, 2)
+  
+  # # plotting accuracy
+  # train_val_accs = [accs, val_accs]
+  # title = "Accuracy"
+  # x_label = "iterations"
+  # y_label = "Accuracy"
+  # labels = ["training accuracy", "validation accuracy"]
+  # plot_outputs(train_val_accs, title, x_label, y_label, labels, 2)
     
   ###############################################################
   # Code for producing output plot requires
@@ -285,45 +351,13 @@ def main():
   # val_acc -- a list of testing accuracy at each epoch
   # batch_size -- the batch size
   ################################################################
-  
-  
-  fig = plt.figure(figsize=(16, 9))
 
-  # ---- FIRST PLOT: Training & Validation Loss ----
-  plt.clf()  # Clear the figure to prepare for the first plot
-  plt.plot(range(len(losses)), losses, c="blue", label="Train Loss")
-  plt.plot(range(len(val_losses)), val_losses, c="red", label="Validation Loss")
-
-  plt.xlabel("Epochs")
-  plt.ylabel("Avg. Cross-Entropy Loss")
-  plt.legend(loc="upper right")
-  plt.ylim(0, max(max(losses), max(val_losses)) * 1.2)  # Dynamically scale Y-axis
-  plt.title("Training vs Validation Loss")
-
-  plt.draw()  # Draw the figure but don't close it
-  plt.pause(1)  # Pause for interaction
-
-  # ---- SECOND PLOT: Training & Validation Accuracy ----
-  plt.clf()  # Clear figure to prepare for the second plot
-  plt.plot(range(len(accs)), accs, c="blue", label="Train Accuracy")
-  plt.plot(range(len(val_accs)), val_accs, c="red", label="Validation Accuracy")
-
-  plt.xlabel("Epochs")
-  plt.ylabel("Accuracy")
-  plt.legend(loc="lower right")
-  plt.ylim(0, 1.01)  # Ensure accuracy stays between 0-1
-  plt.title("Training vs Validation Accuracy")
-
-  plt.draw()  # Update the figure
-  plt.pause(1)  # Pause for interaction
-
-  # Keep the window open and interactive
-  plt.show()
 
 #####################################################
 # Feedforward Neural Network Structure
 # -- Feel free to edit when tuning
 #####################################################
+
 
 class FeedForwardNeuralNetwork:
 
