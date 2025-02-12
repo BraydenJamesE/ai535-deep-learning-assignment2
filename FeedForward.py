@@ -107,10 +107,9 @@ class LinearLayer:
     self.W = self.W + self.velocity_W
     
     # handling bias grads
-    weight_decay_update_b = 2 * step_size * weight_decay * self.b # Found an article telling me to not use weight decay on the bias term. May consider assessing the performance with and without. 
     new_grad_b = step_size * self.grad_bias
     
-    self.velocity_b = momentum * self.velocity_b - new_grad_b - weight_decay_update_b # see comment above for including weight decay or not
+    self.velocity_b = momentum * self.velocity_b - new_grad_b 
     self.b = self.b + self.velocity_b
     
     
@@ -321,13 +320,6 @@ def main():
   end_time =  time.time()
   time_needed = end_time - start_time
   print(f"----- Time to train: {time_needed:.2f} --------")
-
-  plot_accuracy(val_accs)
-  plot_accuracy_ylim(val_accs)
-  plot_val_loss(val_losses)
-  plot_val_loss_ylim(val_losses)
-  print(f"Best Validation Accuracy was {np.max(val_accs)*100:.2f}% at Epoch {np.argmax(val_accs)}")
-  print(f"Lowest Validation Loss was {np.min(val_losses):.3f} at Epoch {np.argmin(val_losses)}")
 
 
 
